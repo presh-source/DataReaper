@@ -1,5 +1,5 @@
 .env
-minio.license
+.minio.license
 logs/*
 
 # Python
