@@ -64,7 +64,7 @@ A self-hosted data pipeline that continuously crawls the GitHub API to collect p
 ### 1. Clone the repository
 
 ```bash
-git clone <your-repo-url>
+git clone git@github.com:presh-source/DataReaper.git
 cd DataReaper
 ```
 
