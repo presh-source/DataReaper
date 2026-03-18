@@ -87,16 +87,16 @@ _AIRFLOW_WWW_USER_USERNAME=airflow
 _AIRFLOW_WWW_USER_PASSWORD=airflow
 AIRFLOW_UID=50000
 
-# PostgreSQL (will be randomised by manage.sh -f)
+# PostgreSQL (will be randomised by setup.sh -f)
 POSTGRES_USER=airflow
 POSTGRES_PASSWORD=changeme
 POSTGRES_DB=airflow
 
-# MongoDB (will be randomised by manage.sh -f)
+# MongoDB (will be randomised by setup.sh -f)
 MONGO_USER=root
 MONGO_PASSWORD=changeme
 
-# MinIO AiStor (will be randomised by manage.sh -f)
+# MinIO AiStor (will be randomised by setup.sh -f)
 MINIO_ROOT_USER=minioadmin
 MINIO_ROOT_PASSWORD=changeme
 MINIO_LICENSE=<paste your license JWT here>
@@ -111,8 +111,8 @@ GITHUB_BUCKET_NAME=github-data
 ### 3. Run the setup script
 
 ```bash
-chmod +x manage.sh
-./manage.sh --force
+chmod +x setup.sh
+./setup.sh --force
 ```
 
 This will:
@@ -139,9 +139,9 @@ Once all containers are healthy, visit:
 http://localhost:8080
 ```
 
-Login with the credentials printed at the end of `manage.sh --force`, or look them up in `.env`:
+Login with the credentials printed at the end of `setup.sh --force`, or look them up in `.env`:
 - **Username:** value of `_AIRFLOW_WWW_USER_USERNAME` (default: `airflow`)
-- **Password:** value of `_AIRFLOW_WWW_USER_PASSWORD` (randomised by `manage.sh`)
+- **Password:** value of `_AIRFLOW_WWW_USER_PASSWORD` (randomised by `setup.sh`)
 
 > ℹ️ Example DAGs are **disabled** by default (`AIRFLOW__CORE__LOAD_EXAMPLES=false`).
 
@@ -162,21 +162,21 @@ State keys:
 
 ---
 
-## manage.sh Reference
+## setup.sh Reference
 
-`manage.sh` is the single script for controlling your entire environment.
+`setup.sh` is the single script for controlling your entire environment.
 
 ```bash
-./manage.sh            # Ensure services are up + re-seed configs (safe, idempotent)
-./manage.sh --force    # Nuclear reset — wipe all data and restart with new passwords
-./manage.sh --rotate   # Live password rotation — rotate credentials without data loss
-./manage.sh --restart  # Restart all containers (volumes untouched)
-./manage.sh --down     # Stop and remove containers (volumes preserved)
-./manage.sh --delete   # ⚠️  Permanently delete all containers AND volumes
-./manage.sh --help     # Show all options
+./setup.sh            # Ensure services are up + re-seed configs (safe, idempotent)
+./setup.sh --force    # Nuclear reset — wipe all data and restart with new passwords
+./setup.sh --rotate   # Live password rotation — rotate credentials without data loss
+./setup.sh --restart  # Restart all containers (volumes untouched)
+./setup.sh --down     # Stop and remove containers (volumes preserved)
+./setup.sh --delete   # ⚠️  Permanently delete all containers AND volumes
+./setup.sh --help     # Show all options
 ```
 
-> 💡 Run `./manage.sh` (no flags) at any time to ensure services are running and configs are up to date. It is fully idempotent.
+> 💡 Run `./setup.sh` (no flags) at any time to ensure services are running and configs are up to date. It is fully idempotent.
 
 ### What gets rotated
 
@@ -206,7 +206,7 @@ DataReaper/
 ├── deps/                            # Python dependencies
 ├── docker-compose.yaml              # All service definitions
 ├── Dockerfile                       # Custom Airflow image
-├── manage.sh                        # Environment management script
+├── setup.sh                        # Environment management script
 └── .env                             # Local secrets (never commit this!)
 ```
 
