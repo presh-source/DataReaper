@@ -7,25 +7,25 @@ A self-hosted data pipeline that continuously crawls the GitHub API to collect p
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                      Docker Network                     │
-│                                                         │
-│  ┌──────────────┐    ┌──────────────┐    ┌───────────┐  │
-│  │   Airflow    │───▶│   MongoDB    │    │  AiStor   │  │
-│  │  (Scheduler  │    │              │    │  (MinIO)  │  │
-│  │   API Server │    │ crawler_config    │           │  │
-│  │   Triggerer) │    │ secrets      │    │ github-   │  │
-│  └──────┬───────┘    └──────────────┘    │ data/     │  │
-│         │                                │  parquet  │  │
-│         │  DAG: github_crawler_dag       └───────────┘  │
-│         │  ↓ reads config from MongoDB                  │
-│         │  ↓ hits GitHub API                            │
-│         │  ↓ writes Parquet to AiStor                   │
-│         │                                               │
-│  ┌──────────────┐                                       │
-│  │  PostgreSQL  │  (Airflow metadata DB)                │
-│  └──────────────┘                                       │
-└─────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│                      Docker Network                      │
+│                                                          │
+│  ┌──────────────┐    ┌───────────────┐    ┌───────────┐  │
+│  │   Airflow    │───▶│   MongoDB     │    │  AiStor   │  │
+│  │  (Scheduler  │    │               │    │  (MinIO)  │  │
+│  │   API Server │    │ crawler_config│    │           │  │
+│  │   Triggerer) │    │ secrets       │    │ github-   │  │
+│  └──────┬───────┘    └───────────────┘    │ data/     │  │
+│         │                                 │  parquet  │  │
+│         │  DAG: github_crawler_dag        └───────────┘  │
+│         │  ↓ reads config from MongoDB                   │
+│         │  ↓ hits GitHub API                             │
+│         │  ↓ writes Parquet to AiStor                    │
+│         │                                                │
+│  ┌──────────────┐                                        │
+│  │  PostgreSQL  │  (Airflow metadata DB)                 │
+│  └──────────────┘                                        │
+└──────────────────────────────────────────────────────────┘
 ```
 
 ### Services
