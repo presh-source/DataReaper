@@ -1,8 +1,9 @@
 import base64
-import os
+from os import getenv
 
 from airflow.utils.log.logging_mixin import LoggingMixin
 from pymongo import MongoClient
+from pymongo.errors import PyMongoError
 
 logger = LoggingMixin().log
 
@@ -27,28 +28,43 @@ def get_crawler_config(state_key: str) -> dict:
     """
     Fetches the crawler configuration from MongoDB using the state_key.
     """
-    MONGO_USER = os.environ.get("MONGO_USER")
-    MONGO_PASSWORD = os.environ.get("MONGO_PASSWORD")
+    try:
+        MONGO_USER = getenv("MONGO_USER")
+        MONGO_PASSWORD = getenv("MONGO_PASSWORD")
 
-    client = MongoClient(f"mongodb://{MONGO_USER}:{MONGO_PASSWORD}@mongodb:27017/")
-    db = client["DataReaper"]
-    collection = db["crawler_config"]
+        client = MongoClient(f"mongodb://{MONGO_USER}:{MONGO_PASSWORD}@mongodb:27017/")
+        mongo_db = client["DataReaper"]
+        secret_collection = mongo_db["secrets"]
+        config_collection = mongo_db["crawler_config"]
 
-    config = collection.find_one({"state_key": state_key})
-
-    if not config:
-        raise ValueError(
-            f"Crawler config not found in MongoDB for state_key: {state_key}"
+        # Get secrets
+        global_secrets = (
+            secret_collection.find_one({"env": "global"}, {"_id": 0, "env": 0}) or {}
         )
+        github_secrets = (
+            secret_collection.find_one({"env": "github"}, {"_id": 0, "env": 0}) or {}
+        )
+        
+        if not global_secrets and not github_secrets:
+             raise ValueError(f"Secrets or config not configured in DB")
 
-    # Automatically map secrets directly into the config dictionary
-    secrets_collection = db["secrets"]
-    secrets = secrets_collection.find_one({"env": "global"}) or {}
+        # Get crawler config
+        crawler_config = config_collection.find_one({"state_key": state_key}, {"_id": 0})
+        
+        if not crawler_config:
+            raise ValueError(
+                f"Crawler config not configured for state_key in DB: {state_key}"
+            )
 
-    config["project_name"] = secrets.get("project_name")
-    config["minio_user"] = secrets.get("minio_user")
-    config["minio_pass"] = secrets.get("minio_pass")
-    config["github_token"] = secrets.get("github_token")
-    config["bucket_name"] = secrets.get("bucket_name")
+        # Merge secrets and config
+        mongo_data = {
+            "secrets": {**global_secrets, **github_secrets},
+            "crawler_config": crawler_config,
+        }
 
-    return config
+        client.close()
+        return mongo_data
+
+    except PyMongoError as e:
+        logger.error(f"Failed to get crawler config: {e}")
+        raise ValueError("Failed to get crawler config") from e

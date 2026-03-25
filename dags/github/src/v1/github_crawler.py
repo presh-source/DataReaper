@@ -15,19 +15,24 @@ from os import getenv
 import pandas as pd
 import requests
 from airflow import DAG
-from airflow.operators.python import PythonOperator
+from airflow.providers.standard.operators.python import PythonOperator
 from airflow.utils.log.logging_mixin import LoggingMixin
+from dotenv import load_dotenv
+from github.utils.crawler_utils import decode_state_key, get_crawler_config
 from minio import Minio
 from pymongo import MongoClient
 from pymongo.errors import PyMongoError
 
-from utils.crawler_utils import decode_state_key, get_crawler_config
-from utils.sentry_config import init_sentry
+# from utils.sentry_config import init_sentry
 
-# Initialize Sentry
-init_sentry()
-
+# init_sentry()
+load_dotenv()
 logger = LoggingMixin().log
+PROJECT_NAME = getenv("PROJECT_NAME")
+MONGO_USER = getenv("MONGO_USER")
+MONGO_PASSWORD = getenv("MONGO_PASSWORD")
+mongo_client = MongoClient(f"mongodb://{MONGO_USER}:{MONGO_PASSWORD}@mongodb:27017/")
+mongo_db = mongo_client[PROJECT_NAME]
 
 
 def flatten_repository(repository: dict) -> dict:
@@ -62,7 +67,12 @@ def flatten_user(user: dict) -> dict:
 
 
 def save_to_minio_parquet(
-    config: dict, items: list[dict], start_id: int, end_id: int, minio_client: Minio
+    secrets: dict,
+    crawler_config: dict,
+    items: list[dict],
+    start_id: int,
+    end_id: int,
+    minio_client: Minio,
 ) -> dict:
     """Save data to MinIO as Parquet with partitioning. Returns file metadata."""
     # Filter out None values as a safety measure
@@ -94,18 +104,19 @@ def save_to_minio_parquet(
     day = f"{now.day:02d}"
 
     # Create MinIO key with partitioning
-    prefix = config["minio_prefix"]
-    filename_prefix = config["organisation"] + "_" + config["entity"]
+    prefix = crawler_config["minio_prefix"]
+    filename_prefix = crawler_config["organisation"] + "_" + crawler_config["entity"]
     minio_key = f"{prefix}/year={year}/month={month}/day={day}/{filename_prefix}_{start_id:012d}_{end_id:012d}.parquet"
 
     try:
         # Flatten nested structures based on type
         flattened_items = []
-        for item in valid_items:
-            if config["entity"] == "repository":
-                flattened_items.append(flatten_repository(item))
-            else:
-                flattened_items.append(flatten_user(item))
+
+        logger.info(f"Flattening {crawler_config['entity']} items")
+        if crawler_config["entity"] == "repository":
+            flattened_items = [flatten_repository(item) for item in valid_items]
+        elif crawler_config["entity"] == "user":
+            flattened_items = [flatten_user(item) for item in valid_items]
 
         # Convert to DataFrame
         df = pd.DataFrame(flattened_items)
@@ -121,8 +132,11 @@ def save_to_minio_parquet(
         parquet_buffer.seek(0)
 
         # Upload to MinIO
+        github_bucket = secrets.get("bucket_name", "github-data")
+        logger.info(f"Uploading to MinIO: {minio_key}")
+        logger.info(f"Bucket name: {github_bucket}")
         minio_client.put_object(
-            bucket_name=config["github_bucket_name"],
+            bucket_name=github_bucket,
             object_name=minio_key,
             data=parquet_buffer,
             length=len(parquet_buffer.getvalue()),
@@ -133,7 +147,7 @@ def save_to_minio_parquet(
                 "count": str(len(valid_items)),
                 "format": "parquet",
                 "compression": "snappy",
-                "entity": config["entity"],
+                "entity": crawler_config["entity"],
             },
         )
 
@@ -198,7 +212,7 @@ def handle_response(response, retry_count, max_retries):
 
 
 def fetch_data(
-    config: dict, since_id: int, github_token: str, max_retries: int = 3
+    crawler_config: dict, since_id: int, github_token: str, max_retries: int = 3
 ) -> tuple[list[dict] | None, dict]:
     """
     Fetch data from GitHub API with exponential backoff retry
@@ -210,7 +224,7 @@ def fetch_data(
         "User-Agent": f"{PROJECT_NAME}-GithubCrawler",
     }
 
-    url = f"{config['endpoint']}?since={since_id}&per_page=100"
+    url = f"{crawler_config['endpoint']}?since={since_id}&per_page=100"
 
     result = None
     request_metrics = {
@@ -289,7 +303,8 @@ def fetch_data(
 
 
 def crawl(
-    config: dict,
+    secrets: dict,
+    crawler_config: dict,
     start_id: int,
     num_requests: int,
     github_token: str,
@@ -319,15 +334,15 @@ def crawl(
             break
 
         # Fetch data
-        items, req_metrics = fetch_data(config, current_id, github_token)
+        items, req_metrics = fetch_data(crawler_config, current_id, github_token)
         request_metrics_list.append(req_metrics)
 
         if items is None:
             logger.warning(
-                f"Failed to fetch {config['entity']} items",
+                f"Failed to fetch {crawler_config['entity']} items",
                 extra={"current_id": current_id},
             )
-            time.sleep(config["sleep_interval"])
+            time.sleep(crawler_config["sleep_interval"])
             continue
 
         if len(items) == 0:
@@ -346,7 +361,7 @@ def crawl(
                 "No valid items in response",
                 extra={"current_id": current_id, "raw_count": len(items)},
             )
-            time.sleep(config["sleep_interval"])
+            time.sleep(crawler_config["sleep_interval"])
             continue
 
         if len(valid_items) < len(items):
@@ -379,19 +394,19 @@ def crawl(
         # Save batch to MinIO every 10 requests (approximately 1000 items)
         if (i + 1) % 10 == 0 and batch_items:
             file_meta = save_to_minio_parquet(
-                config, batch_items, batch_start_id, current_id, minio_client
+                secrets, crawler_config, batch_items, batch_start_id, current_id, minio_client
             )
             minio_files_list.append(file_meta)
             batch_items = []
             batch_start_id = current_id + 1
 
         # Pace requests
-        time.sleep(config["sleep_interval"])
+        time.sleep(crawler_config["sleep_interval"])
 
     # Save any remaining items in the batch
     if batch_items:
         file_meta = save_to_minio_parquet(
-            config, batch_items, batch_start_id, current_id, minio_client
+            secrets, crawler_config, batch_items, batch_start_id, current_id, minio_client
         )
         minio_files_list.append(file_meta)
 
@@ -407,18 +422,10 @@ def update_bookmark(
 
     # Validate state_key format
     organisation, entity = decode_state_key(state_key)
-
-    MONGO_USER = getenv("MONGO_USER")
-    MONGO_PASSWORD = getenv("MONGO_PASSWORD")
-    mongo_client = MongoClient(
-        f"mongodb://{MONGO_USER}:{MONGO_PASSWORD}@mongodb:27017/"
-    )
-    db = mongo_client["airflow"]
-    collection = db["crawler_config"]
+    collection = mongo_db["crawler_config"]
 
     try:
         updated_at = datetime.now(timezone.utc).isoformat()
-
         result = collection.update_one(
             {"state_key": state_key},
             {
@@ -449,13 +456,11 @@ def update_bookmark(
 def run_crawler_task(**kwargs):
     """
     Airflow task handler.
-    Replacing the Lambda event & context with Airflow kwargs execution logic.
     """
-    # Exposing the run_id from Airflow Context in place of context.aws_request_id
-    run_id = kwargs.get("run_id", f"manual_{int(time.time())}")
 
-    # Example logic: pulling the state_key from Airflow DAG Conf (or hardcoded for now)
-    # The user can trigger the DAG with config JSON: {"state_key": "my_org/my_entity"}
+    run_id = kwargs.get("run_id", f"manual_{int(time.time())}")
+    logger.info(f"Processing aggregation for {run_id}")
+
     state_key = (
         kwargs.get("dag_run").conf.get("state_key") if kwargs.get("dag_run") else None
     )
@@ -463,7 +468,7 @@ def run_crawler_task(**kwargs):
     if not state_key:
         logger.error("Missing state_key in DAG run configuration")
         raise ValueError(
-            "Missing state_key in DAG conf. Trigger with: {'state_key': 'org/entity'}"
+            "Missing state_key in DAG conf. Trigger with: {'state_key': 'U1RBVEUjZ2l0aHViI3JlcG9zaXRvcnk='} for repositories"
         )
 
     # Decode state_key to get organisation and entity
@@ -471,20 +476,27 @@ def run_crawler_task(**kwargs):
     logger.info(f"Processing aggregation for {organisation}/{entity}")
 
     try:
-        # Get configuration from MongoDB
-        config = get_crawler_config(state_key)
-        start_id = config["last_processed_id"]
+        # Get configuration and secrets from MongoDB
+        mongo_data = get_crawler_config(state_key)
+        crawler_config = mongo_data["crawler_config"]
+        secrets = mongo_data["secrets"]
 
-        GITHUB_TOKEN = config.get("github_token", getenv("GITHUB_TOKEN"))
+        logger.info(f"Configuration: {crawler_config}")
+
+        # Start from last processed ID for incremental crawling
+        start_id = crawler_config["last_processed_id"]
+
+        # Get GitHub token from secrets
+        GITHUB_TOKEN = secrets.get("github_token")
         if not GITHUB_TOKEN:
-            logger.error("GITHUB_TOKEN not found in MongoDB config or OS env.")
+            logger.error("GITHUB_TOKEN not found in DB config.")
             raise ValueError("GitHub token is not configured.")
 
-        logger.info(f"Starting GitHub {config['entity']} crawler")
+        logger.info(f"Starting GitHub {crawler_config['entity']} crawler")
 
         # Initialize dynamically configured MinIO client
-        minio_user = config.get("minio_user")
-        minio_pass = config.get("minio_pass")
+        minio_user = secrets.get("minio_user")
+        minio_pass = secrets.get("minio_pass")
 
         minio_client = Minio(
             "aistor:9000",
@@ -494,20 +506,25 @@ def run_crawler_task(**kwargs):
         )
 
         try:
-            if not minio_client.bucket_exists(config["github_bucket_name"]):
-                minio_client.make_bucket(config["github_bucket_name"])
+            github_bucket = secrets.get("bucket_name", "github-data")
+            if not minio_client.bucket_exists(github_bucket):
+                minio_client.make_bucket(github_bucket)
         except Exception as e:
-            logger.warning(f"Could not verify MinIO bucket during task execution: {e}")
+            logger.error(f"Could not verify MinIO bucket during task execution: {e}")
+            raise ValueError("MinIO bucket not configured.")
 
-        # Execute crawl (We pass a mock context to satisfy the existing function logic)
+        logger.info(f"MinIO client initialized: {minio_client}")
+
+        # Execute crawl
         class MockLambdaContext:
             def get_remaining_time_in_millis(self):
-                return 300000  # Give it 5 minutes of remaining execution block
+                return 300000
 
         last_processed_id, total_fetched, requests_metrics, minio_files = crawl(
-            config,
+            secrets,
+            crawler_config,
             start_id,
-            config["requests_per_execution"],
+            crawler_config["requests_per_execution"],
             GITHUB_TOKEN,
             MockLambdaContext(),
             minio_client,
@@ -515,7 +532,7 @@ def run_crawler_task(**kwargs):
 
         # Update bookmark
         if last_processed_id > start_id:
-            new_total = config["total_processed"] + total_fetched
+            new_total = crawler_config["total_processed"] + total_fetched
             update_bookmark(
                 state_key,
                 last_processed_id,
@@ -536,7 +553,7 @@ def run_crawler_task(**kwargs):
             try:
                 now = datetime.now(timezone.utc)
                 metadata_key = (
-                    f"cold-path/{config['organisation']}/telemetry/{config['entity']}/"
+                    f"cold-path/{crawler_config['organisation']}/telemetry/{crawler_config['entity']}/"
                     f"year={now.year}/month={now.month:02d}/day={now.day:02d}/"
                     f"{run_id}.json"
                 )
@@ -544,8 +561,8 @@ def run_crawler_task(**kwargs):
                 full_metadata = {
                     "run_id": run_id,
                     "run_metadata": {
-                        "organisation": config["organisation"],
-                        "entity": config["entity"],
+                        "organisation": crawler_config["organisation"],
+                        "entity": crawler_config["entity"],
                         "retrieval": total_fetched,
                         "request_count": len(requests_metrics),
                         "start_id": start_id,
@@ -559,7 +576,7 @@ def run_crawler_task(**kwargs):
                 metadata_bytes = json.dumps(full_metadata).encode("utf-8")
                 metadata_buffer = BytesIO(metadata_bytes)
                 minio_client.put_object(
-                    bucket_name=config["github_bucket_name"],
+                    bucket_name=github_bucket,
                     object_name=metadata_key,
                     data=metadata_buffer,
                     length=len(metadata_bytes),
@@ -572,6 +589,7 @@ def run_crawler_task(**kwargs):
                     extra={"error": str(e)},
                 )
 
+            mongo_client.close()
             return (
                 f"Success: Fetched {total_fetched} items. Last ID: {last_processed_id}"
             )
@@ -594,23 +612,21 @@ default_args = {
     "email_on_failure": False,
     "email_on_retry": False,
     "retries": 1,
-    "retry_delay": timedelta(minutes=5),
+    "retry_delay": timedelta(minutes=1),
 }
 
 with DAG(
-    "github_crawler_dag",
+    "github_crawler_v1",
     default_args=default_args,
-    description="A Unified GitHub Crawler Pipeline",
-    schedule_interval="@hourly",
+    description="A Unified GitHub Crawler Pipeline V1",
+    schedule=None,
     start_date=datetime(2023, 1, 1),
     catchup=False,
     tags=["github", "crawler"],
 ) as dag:
 
     crawl_task = PythonOperator(
-        task_id="execute_crawl",
-        python_callable=run_crawler_task,
-        provide_context=True,
+        task_id="execute_crawl", python_callable=run_crawler_task
     )
 
     crawl_task

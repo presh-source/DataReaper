@@ -79,7 +79,14 @@ rotate_passwords_live() {
     db.getSiblingDB('admin').changeUserPassword('$MONGO_USER', '$NEW_MONGO_PASS')
   "
 
-  # 5. Update .env File
+  # 5. Update MinIO password live via mc CLI
+  echo "Rotating MinIO root password..."
+  docker-compose exec -T aistor sh -c "
+    mc alias set local http://localhost:9000 \"$MINIO_ROOT_USER\" \"$MINIO_ROOT_PASSWORD\" &&
+    mc admin user password local \"$MINIO_ROOT_USER\" \"$NEW_MINIO_PASS\"
+  "
+
+  # 6. Update .env File
   echo "Syncing .env file..."
   safe_sed "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$NEW_PG_PASS|" .env
   safe_sed "s|^MONGO_PASSWORD=.*|MONGO_PASSWORD=$NEW_MONGO_PASS|" .env
@@ -87,7 +94,7 @@ rotate_passwords_live() {
   safe_sed "s|^AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=.*|AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:$NEW_PG_PASS@postgres/airflow|" .env
   safe_sed "s|^_AIRFLOW_WWW_USER_PASSWORD=.*|_AIRFLOW_WWW_USER_PASSWORD=$NEW_AIRFLOW_PASS|" .env
 
-  # 6. Update MongoDB Secrets Collection
+  # 7. Update MongoDB Secrets Collection
   docker-compose exec -T mongodb mongosh -u "$MONGO_USER" -p "$NEW_MONGO_PASS" --authenticationDatabase admin --eval "
     const db = db.getSiblingDB('$PROJECT_NAME');
     db.secrets.updateOne({ env: 'global' }, {
@@ -100,13 +107,13 @@ rotate_passwords_live() {
     }, { upsert: true });
   "
 
-  # 7. Update Airflow web UI user password live (without restart)
+  # 8. Update Airflow web UI user password live (without restart)
   echo "Updating Airflow web UI password..."
   docker-compose exec -T airflow-apiserver airflow users set-password \
     --username "$_AIRFLOW_WWW_USER_USERNAME" \
     --password "$NEW_AIRFLOW_PASS"
 
-  # 8. Restart services to apply env changes (NO -v FLAG!)
+  # 9. Restart services to apply env changes (NO -v FLAG!)
   echo "Restarting containers to apply new environment variables..."
   docker-compose up -d --force-recreate
   
@@ -200,8 +207,8 @@ seed_mongo_configs() {
   source .env
   docker-compose exec -T mongodb mongosh -u "$MONGO_USER" -p "$MONGO_PASSWORD" --authenticationDatabase admin --eval "
     const db = db.getSiblingDB('$PROJECT_NAME');
-    db.secrets.updateOne({ env: 'global' }, { \$set: { project_name: '$PROJECT_NAME' } }, { upsert: true });
-    db.secrets.updateOne({ env: 'github' }, { \$set: { github_token: '$GITHUB_TOKEN', github_bucket_name: '$GITHUB_BUCKET_NAME' } }, { upsert: true });
+    db.secrets.updateOne({ env: 'global' }, { \$set: { project_name: '$PROJECT_NAME', minio_user: '$MINIO_ROOT_USER', minio_pass: '$MINIO_ROOT_PASSWORD' } }, { upsert: true });
+    db.secrets.updateOne({ env: 'github' }, { \$set: { github_token: '$GITHUB_TOKEN', github_bucket: '$GITHUB_BUCKET_NAME' } }, { upsert: true });
     
     // Seed Crawler Configs
     db.crawler_config.createIndex({ state_key: 1 }, { unique: true });
