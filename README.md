@@ -196,7 +196,14 @@ DataReaper/
 ├── dags/
 │   └── github/
 │       ├── src/
-│       │   └── github_crawler.py    # Airflow DAG + crawler logic
+│       │   ├── v1
+│       │   │   └── github_crawler.py    # Airflow DAG + crawler logic
+│       │   └── v2
+│       │       ├── execute_crawl.py
+│       │       ├── github_crawler_pipeline.py
+│       │       ├── initialize_run.py
+│       │       ├── save_metadata.py
+│       │       └── update_bookmark.py
 │       └── utils/
 │           ├── crawler_utils.py     # Config and secret fetching from MongoDB
 │           └── sentry_config.py     # Error tracking setup
