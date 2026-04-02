@@ -1,4 +1,4 @@
-# DataReaper 🕷️
+# data-reaper 🕷️
 
 A self-hosted data pipeline that continuously crawls the GitHub API to collect public **repository** and **user** data, stores it as compressed Parquet files in object storage, and orchestrates everything with Apache Airflow.
 
@@ -64,8 +64,8 @@ A self-hosted data pipeline that continuously crawls the GitHub API to collect p
 ### 1. Clone the repository
 
 ```bash
-git clone git@github.com:presh-source/DataReaper.git
-cd DataReaper
+git clone git@github.com:presh-source/data-reaper.git
+cd data-reaper
 ```
 
 ### 2. Create your `.env` file
@@ -80,7 +80,7 @@ Required values in `.env`:
 
 ```env
 # Project
-PROJECT_NAME=DataReaper
+PROJECT_NAME=data-reaper
 
 # Airflow (leave defaults for local dev)
 _AIRFLOW_WWW_USER_USERNAME=airflow
@@ -192,7 +192,7 @@ After either flag, new credentials are printed to the terminal **and** saved to 
 ## Project Structure
 
 ```
-DataReaper/
+data-reaper/
 ├── dags/
 │   └── github/
 │       ├── src/
@@ -223,8 +223,8 @@ DataReaper/
 
 | Database | Collection | Purpose |
 |---|---|---|
-| `DataReaper` | `secrets` | Stores all credentials (env: `global`, env: `github`) |
-| `DataReaper` | `crawler_state` | Per-entity crawl state (last ID, total processed, endpoint) |
+| `data-reaper` | `secrets` | Stores all credentials (env: `global`, env: `github`) |
+| `data-reaper` | `crawler_state` | Per-entity crawl state (last ID, total processed, endpoint) |
 
 ### `secrets` document (env: `global`)
 

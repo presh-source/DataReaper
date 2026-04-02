@@ -1,4 +1,6 @@
 .env
+env
+.DS_Store
 .minio.license
 logs/
 docker/logs/
@@ -16,4 +18,3 @@ docker/config/airflow.cfg
 .terraform/
 .terraform.lock.hcl
 terraform.tfstate*
-.DS_Store

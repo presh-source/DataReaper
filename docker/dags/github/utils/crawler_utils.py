@@ -33,7 +33,7 @@ def get_crawler_state(state_key: str) -> dict:
         MONGO_PASSWORD = getenv("MONGO_PASSWORD")
 
         client = MongoClient(f"mongodb://{MONGO_USER}:{MONGO_PASSWORD}@mongodb:27017/")
-        mongo_db = client["DataReaper"]
+        mongo_db = client["data-reaper"]
         secret_collection = mongo_db["secrets"]
         config_collection = mongo_db["crawler_state"]
 

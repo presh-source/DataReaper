@@ -1,7 +1,7 @@
 # Compute Instance — ARM-based Ubuntu server running Docker and Airflow pipelines
 resource "oci_core_instance" "compute_instance" {
   compartment_id      = var.compartment_id
-  display_name        = "${var.project_name}-instance" 
+  display_name        = "${var.project_name}-instance"
   freeform_tags       = var.freeform_tags
   availability_domain = var.availability_domain
   shape               = "VM.Standard.A1.Flex"
@@ -19,7 +19,7 @@ resource "oci_core_instance" "compute_instance" {
     subnet_id        = oci_core_subnet.public_subnet.id
     display_name     = "${var.project_name}-vnic"
     assign_public_ip = true
-    hostname_label   = "datareaper"
+    hostname_label   = "data-reaper"
   }
 
   source_details {

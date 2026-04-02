@@ -1,13 +1,13 @@
 #!/bin/bash
 # =============================================================================
-# DataReaper Instance Initialization Script
+# data-reaper Instance Initialization Script
 # Runs once on first boot via cloud-init
 # =============================================================================
 set -euo pipefail
-exec > >(tee /var/log/datareaper-init.log) 2>&1
+exec > >(tee /var/log/data-reaper-init.log) 2>&1
 
 echo "=========================================="
-echo "DataReaper Instance Initialization"
+echo "data-reaper Instance Initialization"
 echo "Started: $(date)"
 echo "=========================================="
 
@@ -87,7 +87,7 @@ echo "Docker installed: $(docker --version)"
 # -----------------------------------------------------------------------------
 echo "[4/5] Setting up project directory..."
 
-PROJECT_DIR="/mnt/data/DataReaper"
+PROJECT_DIR="/mnt/data/data-reaper"
 mkdir -p "$PROJECT_DIR"
 chown -R ubuntu:ubuntu /mnt/data
 
@@ -99,15 +99,8 @@ echo "Clone your repo here: git clone <your-repo-url> $PROJECT_DIR"
 # -----------------------------------------------------------------------------
 echo ""
 echo "=========================================="
-echo "DataReaper Instance Initialization Complete!"
+echo "data-reaper Instance Initialization Complete!"
 echo "Finished: $(date)"
 echo "=========================================="
 echo ""
-echo "Next steps:"
-echo "  1. SSH in:  ssh -i <key> ubuntu@<public-ip>"
-echo "  2. Clone:   git clone <repo-url> $PROJECT_DIR"
-echo "  3. cd $PROJECT_DIR/docker"
-echo "  4. cp .env.example .env  (edit with your secrets)"
-echo "  5. ./setup.sh"
-echo ""
-echo "Logs saved to: /var/log/datareaper-init.log"
+echo "Logs saved to: /var/log/data-reaper-init.log"

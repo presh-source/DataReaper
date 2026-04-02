@@ -5,14 +5,17 @@ terraform {
       source = "oracle/oci"
     }
   }
+
+  backend "oci" {
+
+  }
 }
 
 # OCI Provider — Authenticates dynamically 
 provider "oci" {
+  auth                = "config_file"
+  config_file_profile = "DEFAULT"
   region              = var.region
-  auth                = var.oci_auth_method
-  config_file_profile = var.oci_auth_profile
-  
   tenancy_ocid     = var.tenancy_ocid
   user_ocid        = var.user_ocid
   fingerprint      = var.fingerprint

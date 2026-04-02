@@ -19,41 +19,32 @@ variable "ssh_public_key" {
 }
 
 variable "region" {
-  type    = string
-  default = "us-ashburn-1"
-}
-
-variable "oci_auth_method" {
-  type    = string
-  default = "SecurityToken"
-}
-
-variable "oci_auth_profile" {
-  type    = string
-  default = "Default"
+  type        = string
+  description = "OCI region"
 }
 
 variable "tenancy_ocid" {
-  type    = string
-  default = ""
+  type        = string
+  description = "OCI tenancy OCID"
 }
 
 variable "user_ocid" {
-  type    = string
-  default = ""
+  type        = string
+  description = "OCI user OCID"
 }
 
 variable "fingerprint" {
-  type    = string
-  default = ""
+  type        = string
+  description = "OCI fingerprint"
 }
 
 variable "private_key_path" {
-  type    = string
-  default = ""
+  type        = string
+  description = "OCI private key path"
 }
 
 variable "freeform_tags" {
   type        = map(string)
+  default     = {}
   description = "Tags applied to all resources for tracking and organization"
 }

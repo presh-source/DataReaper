@@ -1,4 +1,4 @@
-name: Deploy DataReaper to OCI
+name: Deploy data-reaper to OCI
 
 on:
   push:

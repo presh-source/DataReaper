@@ -13,7 +13,7 @@ fi
 
 PUBLIC_IP=$1
 PRIVATE_KEY=$2
-PROJECT_DIR_ON_SERVER="/mnt/data/DataReaper"
+PROJECT_DIR_ON_SERVER="/mnt/data/data-reaper"
 LOCAL_PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 echo "=========================================="
@@ -30,7 +30,7 @@ ssh -o StrictHostKeyChecking=no -i "$PRIVATE_KEY" ubuntu@"$PUBLIC_IP" << 'EOF'
   echo "Cloud-init finished!"
   
   # Ensure the project directory is owned by ubuntu user
-  sudo mkdir -p /mnt/data/DataReaper
+  sudo mkdir -p /mnt/data/data-reaper
   sudo chown -R ubuntu:ubuntu /mnt/data
 EOF
 
@@ -54,9 +54,9 @@ ssh -o StrictHostKeyChecking=no -i "$PRIVATE_KEY" ubuntu@"$PUBLIC_IP" << EOF
     if [ -f .env.example ]; then
       echo "No .env file found. Copying .env.example..."
       cp .env.example .env
-      echo "⚠️ IMPORTANT: Replace placeholder passwords in .env!"
+      echo "IMPORTANT: Replace placeholder passwords in .env!"
     else
-      echo "❌ Error: No .env file exists and no .env.example found."
+      echo "Error: No .env file exists and no .env.example found."
       exit 1
     fi
   fi
