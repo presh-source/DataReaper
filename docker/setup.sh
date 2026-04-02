@@ -17,7 +17,7 @@ while [[ "$#" -gt 0 ]]; do
         --down)       DOWN=true ;;
         --delete)     DELETE=true ;;
         -h|--help)
-            echo "Usage: ./manage.sh [OPTION]"
+            echo "Usage: ./setup.sh [OPTION]"
             echo ""
             echo "Options:"
             echo "  (no flag)     Ensure services are up and re-seed configs"
@@ -28,7 +28,7 @@ while [[ "$#" -gt 0 ]]; do
             echo "  --delete      Stop containers AND permanently delete all volumes"
             echo "  -h, --help    Show this help message"
             exit 0 ;;
-        *) echo "Unknown parameter: $1. Run ./manage.sh --help for usage."; exit 1 ;;
+        *) echo "Unknown parameter: $1. Run ./setup.sh --help for usage."; exit 1 ;;
     esac
     shift
 done
@@ -208,17 +208,17 @@ seed_mongo_configs() {
   docker-compose exec -T mongodb mongosh -u "$MONGO_USER" -p "$MONGO_PASSWORD" --authenticationDatabase admin --eval "
     const db = db.getSiblingDB('$PROJECT_NAME');
     db.secrets.updateOne({ env: 'global' }, { \$set: { project_name: '$PROJECT_NAME', minio_user: '$MINIO_ROOT_USER', minio_pass: '$MINIO_ROOT_PASSWORD' } }, { upsert: true });
-    db.secrets.updateOne({ env: 'github' }, { \$set: { github_token: '$GITHUB_TOKEN', github_bucket: '$GITHUB_BUCKET_NAME' } }, { upsert: true });
+    db.secrets.updateOne({ env: 'github' }, { \$set: { github_token: '$GB_TOKEN', github_bucket: '$GITHUB_BUCKET_NAME' } }, { upsert: true });
     
     // Seed Crawler Configs
-    db.crawler_config.createIndex({ state_key: 1 }, { unique: true });
+    db.crawler_state.createIndex({ state_key: 1 }, { unique: true });
     const configs = [
-      { key: 'U1RBVEUjZ2l0aHViI3JlcG9zaXRvcnk=', entity: 'repository', prefix: 'repositories', endpoint: 'https://api.github.com/repositories' },
-      { key: 'U1RBVEUjZ2l0aHViI3VzZXI=', entity: 'user', prefix: 'users', endpoint: 'https://api.github.com/users' }
+      { key: 'U1RBVEUjZ2l0aHViI3JlcG9zaXRvcnk=', entity: 'repository', endpoint: 'https://api.github.com/repositories' },
+      { key: 'U1RBVEUjZ2l0aHViI3VzZXI=', entity: 'user', endpoint: 'https://api.github.com/users' }
     ];
     configs.forEach(c => {
-      db.crawler_config.updateOne({ state_key: c.key }, {
-        \$set: { organisation: 'github', entity: c.entity, minio_prefix: c.prefix, endpoint: c.endpoint, requests_per_execution: 1200, sleep_interval: 0.1 },
+      db.crawler_state.updateOne({ state_key: c.key }, {
+        \$set: { organisation: 'github', entity: c.entity, endpoint: c.endpoint, requests_per_execution: 2000, sleep_interval: 0.1 },
         \$setOnInsert: { last_processed_id: 0, total_processed: 0, updated_at: new Date().toISOString() }
       }, { upsert: true });
     });

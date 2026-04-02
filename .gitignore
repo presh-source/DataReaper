@@ -1,6 +1,7 @@
 .env
 .minio.license
-logs/*
+logs/
+docker/logs/
 
 # Python
 __pycache__/
@@ -8,4 +9,10 @@ __pycache__/
 *.pyo
 
 # Airflow auto-generated config
-config/airflow.cfg
+docker/config/airflow.cfg
+
+# Terraform
+*.tfvars
+.terraform/
+.terraform.lock.hcl
+terraform.tfstate*

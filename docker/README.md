@@ -13,7 +13,7 @@ A self-hosted data pipeline that continuously crawls the GitHub API to collect p
 │  ┌──────────────┐    ┌───────────────┐    ┌───────────┐  │
 │  │   Airflow    │───▶│   MongoDB     │    │  AiStor   │  │
 │  │  (Scheduler  │    │               │    │  (MinIO)  │  │
-│  │   API Server │    │ crawler_config│    │           │  │
+│  │   API Server │    │ crawler_state│    │           │  │
 │  │   Triggerer) │    │ secrets       │    │ github-   │  │
 │  └──────┬───────┘    └───────────────┘    │ data/     │  │
 │         │                                 │  parquet  │  │
@@ -43,7 +43,7 @@ A self-hosted data pipeline that continuously crawls the GitHub API to collect p
 ### Data Flow
 
 1. Airflow triggers `github_crawler_dag` on a schedule (`@hourly`)
-2. The crawler reads its configuration (endpoint, last processed ID, rate limits) from **MongoDB** (`crawler_config` collection)
+2. The crawler reads its configuration (endpoint, last processed ID, rate limits) from **MongoDB** (`crawler_state` collection)
 3. It reads credentials (GitHub token, MinIO user/pass) from **MongoDB** (`secrets` collection)
 4. It paginates the GitHub API (`/repositories` or `/users`) starting from the last processed ID
 5. Data is batched, flattened, and saved to **AiStor** as Parquet files partitioned by `year/month/day`
@@ -102,7 +102,7 @@ MINIO_ROOT_PASSWORD=changeme
 MINIO_LICENSE=<paste your license JWT here>
 
 # GitHub
-GITHUB_TOKEN=<your GitHub personal access token>
+GB_TOKEN=<your GitHub personal access token>
 GITHUB_BUCKET_NAME=github-data
 ```
 
@@ -224,7 +224,7 @@ DataReaper/
 | Database | Collection | Purpose |
 |---|---|---|
 | `DataReaper` | `secrets` | Stores all credentials (env: `global`, env: `github`) |
-| `DataReaper` | `crawler_config` | Per-entity crawl state (last ID, total processed, endpoint) |
+| `DataReaper` | `crawler_state` | Per-entity crawl state (last ID, total processed, endpoint) |
 
 ### `secrets` document (env: `global`)
 

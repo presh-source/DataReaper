@@ -5,9 +5,7 @@ Stores raw data in minio as Parquet files
 """
 
 import json
-import os
 import time
-import uuid
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from os import getenv
@@ -18,7 +16,7 @@ from airflow import DAG
 from airflow.providers.standard.operators.python import PythonOperator
 from airflow.utils.log.logging_mixin import LoggingMixin
 from dotenv import load_dotenv
-from github.utils.crawler_utils import decode_state_key, get_crawler_config
+from github.utils.crawler_utils import decode_state_key, get_crawler_state
 from minio import Minio
 from pymongo import MongoClient
 from pymongo.errors import PyMongoError
@@ -68,7 +66,7 @@ def flatten_user(user: dict) -> dict:
 
 def save_to_minio_parquet(
     secrets: dict,
-    crawler_config: dict,
+    crawler_state: dict,
     items: list[dict],
     start_id: int,
     end_id: int,
@@ -98,24 +96,23 @@ def save_to_minio_parquet(
             "row_count": 0,
         }
 
-    now = datetime.now(timezone.utc)
-    year = now.year
-    month = f"{now.month:02d}"
-    day = f"{now.day:02d}"
-
     # Create MinIO key with partitioning
-    prefix = crawler_config["minio_prefix"]
-    filename_prefix = crawler_config["organisation"] + "_" + crawler_config["entity"]
-    minio_key = f"{prefix}/year={year}/month={month}/day={day}/{filename_prefix}_{start_id:012d}_{end_id:012d}.parquet"
+    now = datetime.now(timezone.utc)
+    filename_prefix = crawler_state["organisation"] + "_" + crawler_state["entity"]
+    minio_key = (
+        f"raw/{crawler_state['entity']}/"
+        f"year={now.year}/month={now.month:02d}/day={now.day:02d}/"
+        f"{filename_prefix}_{start_id}_{end_id}.parquet"
+    )
 
     try:
         # Flatten nested structures based on type
         flattened_items = []
 
-        logger.info(f"Flattening {crawler_config['entity']} items")
-        if crawler_config["entity"] == "repository":
+        logger.info(f"Flattening {crawler_state['entity']} items")
+        if crawler_state["entity"] == "repository":
             flattened_items = [flatten_repository(item) for item in valid_items]
-        elif crawler_config["entity"] == "user":
+        elif crawler_state["entity"] == "user":
             flattened_items = [flatten_user(item) for item in valid_items]
 
         # Convert to DataFrame
@@ -134,7 +131,6 @@ def save_to_minio_parquet(
         # Upload to MinIO
         github_bucket = secrets.get("bucket_name", "github-data")
         logger.info(f"Uploading to MinIO: {minio_key}")
-        logger.info(f"Bucket name: {github_bucket}")
         minio_client.put_object(
             bucket_name=github_bucket,
             object_name=minio_key,
@@ -147,7 +143,7 @@ def save_to_minio_parquet(
                 "count": str(len(valid_items)),
                 "format": "parquet",
                 "compression": "snappy",
-                "entity": crawler_config["entity"],
+                "entity": crawler_state["entity"],
             },
         )
 
@@ -212,7 +208,7 @@ def handle_response(response, retry_count, max_retries):
 
 
 def fetch_data(
-    crawler_config: dict, since_id: int, github_token: str, max_retries: int = 3
+    crawler_state: dict, since_id: int, github_token: str, max_retries: int = 3
 ) -> tuple[list[dict] | None, dict]:
     """
     Fetch data from GitHub API with exponential backoff retry
@@ -224,7 +220,7 @@ def fetch_data(
         "User-Agent": f"{PROJECT_NAME}-GithubCrawler",
     }
 
-    url = f"{crawler_config['endpoint']}?since={since_id}&per_page=100"
+    url = f"{crawler_state['endpoint']}?since={since_id}&per_page=100"
 
     result = None
     request_metrics = {
@@ -304,7 +300,7 @@ def fetch_data(
 
 def crawl(
     secrets: dict,
-    crawler_config: dict,
+    crawler_state: dict,
     start_id: int,
     num_requests: int,
     github_token: str,
@@ -334,15 +330,15 @@ def crawl(
             break
 
         # Fetch data
-        items, req_metrics = fetch_data(crawler_config, current_id, github_token)
+        items, req_metrics = fetch_data(crawler_state, current_id, github_token)
         request_metrics_list.append(req_metrics)
 
         if items is None:
             logger.warning(
-                f"Failed to fetch {crawler_config['entity']} items",
+                f"Failed to fetch {crawler_state['entity']} items",
                 extra={"current_id": current_id},
             )
-            time.sleep(crawler_config["sleep_interval"])
+            time.sleep(crawler_state["sleep_interval"])
             continue
 
         if len(items) == 0:
@@ -361,7 +357,7 @@ def crawl(
                 "No valid items in response",
                 extra={"current_id": current_id, "raw_count": len(items)},
             )
-            time.sleep(crawler_config["sleep_interval"])
+            time.sleep(crawler_state["sleep_interval"])
             continue
 
         if len(valid_items) < len(items):
@@ -394,19 +390,29 @@ def crawl(
         # Save batch to MinIO every 10 requests (approximately 1000 items)
         if (i + 1) % 10 == 0 and batch_items:
             file_meta = save_to_minio_parquet(
-                secrets, crawler_config, batch_items, batch_start_id, current_id, minio_client
+                secrets,
+                crawler_state,
+                batch_items,
+                batch_start_id,
+                current_id,
+                minio_client,
             )
             minio_files_list.append(file_meta)
             batch_items = []
             batch_start_id = current_id + 1
 
         # Pace requests
-        time.sleep(crawler_config["sleep_interval"])
+        time.sleep(crawler_state["sleep_interval"])
 
     # Save any remaining items in the batch
     if batch_items:
         file_meta = save_to_minio_parquet(
-            secrets, crawler_config, batch_items, batch_start_id, current_id, minio_client
+            secrets,
+            crawler_state,
+            batch_items,
+            batch_start_id,
+            current_id,
+            minio_client,
         )
         minio_files_list.append(file_meta)
 
@@ -422,7 +428,7 @@ def update_bookmark(
 
     # Validate state_key format
     organisation, entity = decode_state_key(state_key)
-    collection = mongo_db["crawler_config"]
+    collection = mongo_db["crawler_state"]
 
     try:
         updated_at = datetime.now(timezone.utc).isoformat()
@@ -477,22 +483,22 @@ def run_crawler_task(**kwargs):
 
     try:
         # Get configuration and secrets from MongoDB
-        mongo_data = get_crawler_config(state_key)
-        crawler_config = mongo_data["crawler_config"]
+        mongo_data = get_crawler_state(state_key)
+        crawler_state = mongo_data["crawler_state"]
         secrets = mongo_data["secrets"]
 
-        logger.info(f"Configuration: {crawler_config}")
+        logger.info(f"Configuration: {crawler_state}")
 
         # Start from last processed ID for incremental crawling
-        start_id = crawler_config["last_processed_id"]
+        start_id = crawler_state["last_processed_id"]
 
         # Get GitHub token from secrets
-        GITHUB_TOKEN = secrets.get("github_token")
-        if not GITHUB_TOKEN:
-            logger.error("GITHUB_TOKEN not found in DB config.")
+        GB_TOKEN = secrets.get("github_token")
+        if not GB_TOKEN:
+            logger.error("GB_TOKEN not found in DB config.")
             raise ValueError("GitHub token is not configured.")
 
-        logger.info(f"Starting GitHub {crawler_config['entity']} crawler")
+        logger.info(f"Starting GitHub {crawler_state['entity']} crawler")
 
         # Initialize dynamically configured MinIO client
         minio_user = secrets.get("minio_user")
@@ -522,17 +528,17 @@ def run_crawler_task(**kwargs):
 
         last_processed_id, total_fetched, requests_metrics, minio_files = crawl(
             secrets,
-            crawler_config,
+            crawler_state,
             start_id,
-            crawler_config["requests_per_execution"],
-            GITHUB_TOKEN,
+            crawler_state["requests_per_execution"],
+            GB_TOKEN,
             MockLambdaContext(),
             minio_client,
         )
 
         # Update bookmark
         if last_processed_id > start_id:
-            new_total = crawler_config["total_processed"] + total_fetched
+            new_total = crawler_state["total_processed"] + total_fetched
             update_bookmark(
                 state_key,
                 last_processed_id,
@@ -549,20 +555,22 @@ def run_crawler_task(**kwargs):
                     "total_processed": new_total,
                 },
             )
-            # I need to save the metadata to MinIO
             try:
                 now = datetime.now(timezone.utc)
+                filename_prefix = (
+                    crawler_state["organisation"] + "_" + crawler_state["entity"]
+                )
                 metadata_key = (
-                    f"cold-path/{crawler_config['organisation']}/telemetry/{crawler_config['entity']}/"
+                    f"telemetry/{crawler_state['entity']}/"
                     f"year={now.year}/month={now.month:02d}/day={now.day:02d}/"
-                    f"{run_id}.json"
+                    f"{filename_prefix}_{run_id}.json"
                 )
 
                 full_metadata = {
                     "run_id": run_id,
                     "run_metadata": {
-                        "organisation": crawler_config["organisation"],
-                        "entity": crawler_config["entity"],
+                        "organisation": crawler_state["organisation"],
+                        "entity": crawler_state["entity"],
                         "retrieval": total_fetched,
                         "request_count": len(requests_metrics),
                         "start_id": start_id,
@@ -624,7 +632,6 @@ with DAG(
     catchup=False,
     tags=["github", "crawler"],
 ) as dag:
-
     crawl_task = PythonOperator(
         task_id="execute_crawl", python_callable=run_crawler_task
     )

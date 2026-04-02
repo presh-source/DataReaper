@@ -1,0 +1,48 @@
+name: Deploy DataReaper to OCI
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH Key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SERVER_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+          
+      - name: Create .env from GitHub Secrets
+        run: |
+          # Automatically inject your secrets into the docker directory before syncing
+          cd docker
+          cat <<EOF > .env
+          PROJECT_NAME=${{ github.event.repository.name }}
+          _AIRFLOW_WWW_USER_USERNAME=${{ secrets._AIRFLOW_WWW_USER_USERNAME }}
+          _AIRFLOW_WWW_USER_PASSWORD=${{ secrets._AIRFLOW_WWW_USER_PASSWORD }}
+          AIRFLOW_UID=${{ secrets.AIRFLOW_UID }}
+          AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=${{ secrets.AIRFLOW__DATABASE__SQL_ALCHEMY_CONN }}
+          POSTGRES_USER=${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB=${{ secrets.POSTGRES_DB }}
+          MONGO_USER=${{ secrets.MONGO_USER }}
+          MONGO_PASSWORD=${{ secrets.MONGO_PASSWORD }}
+          MINIO_ROOT_USER=${{ secrets.MINIO_ROOT_USER }}
+          MINIO_ROOT_PASSWORD=${{ secrets.MINIO_ROOT_PASSWORD }}
+          MINIO_LICENSE=${{ secrets.MINIO_LICENSE }}
+          GB_TOKEN=${{ secrets.MY_GB_TOKEN }}
+          GITHUB_BUCKET_NAME=${{ secrets.GITHUB_BUCKET_NAME }}
+          EOF
+
+      - name: Run Deployment Script
+        run: |
+          chmod +x infra/scripts/provision_server.sh
+          ./infra/scripts/provision_server.sh ${{ secrets.SERVER_HOST }} ~/.ssh/id_rsa

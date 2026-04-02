@@ -24,7 +24,7 @@ def decode_state_key(state_key: str) -> tuple[str, str]:
         raise ValueError("Invalid state_key format") from e
 
 
-def get_crawler_config(state_key: str) -> dict:
+def get_crawler_state(state_key: str) -> dict:
     """
     Fetches the crawler configuration from MongoDB using the state_key.
     """
@@ -35,7 +35,7 @@ def get_crawler_config(state_key: str) -> dict:
         client = MongoClient(f"mongodb://{MONGO_USER}:{MONGO_PASSWORD}@mongodb:27017/")
         mongo_db = client["DataReaper"]
         secret_collection = mongo_db["secrets"]
-        config_collection = mongo_db["crawler_config"]
+        config_collection = mongo_db["crawler_state"]
 
         # Get secrets
         global_secrets = (
@@ -44,14 +44,14 @@ def get_crawler_config(state_key: str) -> dict:
         github_secrets = (
             secret_collection.find_one({"env": "github"}, {"_id": 0, "env": 0}) or {}
         )
-        
+
         if not global_secrets and not github_secrets:
-             raise ValueError(f"Secrets or config not configured in DB")
+            raise ValueError("Secrets not configured in DB")
 
         # Get crawler config
-        crawler_config = config_collection.find_one({"state_key": state_key}, {"_id": 0})
-        
-        if not crawler_config:
+        crawler_state = config_collection.find_one({"state_key": state_key}, {"_id": 0})
+
+        if not crawler_state:
             raise ValueError(
                 f"Crawler config not configured for state_key in DB: {state_key}"
             )
@@ -59,7 +59,7 @@ def get_crawler_config(state_key: str) -> dict:
         # Merge secrets and config
         mongo_data = {
             "secrets": {**global_secrets, **github_secrets},
-            "crawler_config": crawler_config,
+            "crawler_state": crawler_state,
         }
 
         client.close()

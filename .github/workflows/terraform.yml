@@ -1,0 +1,66 @@
+name: Terraform Deploy to OCI
+
+on:
+  push:
+    paths:
+      - 'infra/tf/**'
+    branches:
+      - main
+  pull_request:
+    paths:
+      - 'infra/tf/**'
+  workflow_dispatch:
+
+jobs:
+  terraform:
+    name: "Terraform Plan & Apply"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/tf
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # Install the required version of Terraform
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7.0"
+
+      # Put your private OCI API key into a file so Terraform can use it
+      - name: Write OCI Private Key
+        run: |
+          mkdir -p ~/.oci
+          echo "${{ secrets.OCI_PRIVATE_KEY }}" > ~/.oci/oci_api_key.pem
+          chmod 600 ~/.oci/oci_api_key.pem
+
+      # Initialize Terraform modules and providers
+      - name: Terraform Init
+        run: terraform init
+
+      # Check if code is formatted cleanly
+      - name: Terraform Format
+        run: terraform fmt -check
+
+      # Standard Terraform Plan using Secrets for Authentication
+      - name: Terraform Plan
+        run: terraform plan -no-color
+        env:
+          TF_VAR_tenancy_ocid: ${{ secrets.OCI_TENANCY_OCID }}
+          TF_VAR_user_ocid: ${{ secrets.OCI_USER_OCID }}
+          TF_VAR_fingerprint: ${{ secrets.OCI_FINGERPRINT }}
+          TF_VAR_region: ${{ secrets.OCI_REGION }}
+          TF_VAR_private_key_path: "/home/runner/.oci/oci_api_key.pem"
+
+      # Only run Apply when code is merged to main (not during Pull Requests)
+      - name: Terraform Apply
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: terraform apply -auto-approve
+        env:
+          TF_VAR_tenancy_ocid: ${{ secrets.OCI_TENANCY_OCID }}
+          TF_VAR_user_ocid: ${{ secrets.OCI_USER_OCID }}
+          # TF_VAR_fingerprint: ${{ secrets.OCI_FINGERPRINT }}
+          TF_VAR_region: ${{ secrets.OCI_REGION }}
+          TF_VAR_private_key_path: "/home/runner/.oci/oci_api_key.pem"
