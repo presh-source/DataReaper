@@ -16,4 +16,4 @@ docker/config/airflow.cfg
 .terraform/
 .terraform.lock.hcl
 terraform.tfstate*
-_DS_Store
+.DS_Store
