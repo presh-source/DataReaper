@@ -8,7 +8,7 @@ __pycache__/
 *.pyc
 *.pyo
 
-# Airflow auto-generated config
+# Airflow
 docker/config/airflow.cfg
 
 # Terraform
