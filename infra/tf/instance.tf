@@ -19,7 +19,7 @@ resource "oci_core_instance" "compute_instance" {
     subnet_id        = oci_core_subnet.public_subnet.id
     display_name     = "${var.project_name}-vnic"
     assign_public_ip = true
-    hostname_label   = "data-reaper"
+    hostname_label   = var.project_name
   }
 
   source_details {
