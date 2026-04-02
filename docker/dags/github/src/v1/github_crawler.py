@@ -493,9 +493,9 @@ def run_crawler_task(**kwargs):
         start_id = crawler_state["last_processed_id"]
 
         # Get GitHub token from secrets
-        GB_TOKEN = secrets.get("github_token")
-        if not GB_TOKEN:
-            logger.error("GB_TOKEN not found in DB config.")
+        GITHUB_TOKEN = secrets.get("github_token")
+        if not GITHUB_TOKEN:
+            logger.error("GITHUB_TOKEN not found in DB config.")
             raise ValueError("GitHub token is not configured.")
 
         logger.info(f"Starting GitHub {crawler_state['entity']} crawler")
@@ -531,7 +531,7 @@ def run_crawler_task(**kwargs):
             crawler_state,
             start_id,
             crawler_state["requests_per_execution"],
-            GB_TOKEN,
+            GITHUB_TOKEN,
             MockLambdaContext(),
             minio_client,
         )

@@ -38,11 +38,13 @@ jobs:
           MINIO_ROOT_USER=${{ secrets.MINIO_ROOT_USER }}
           MINIO_ROOT_PASSWORD=${{ secrets.MINIO_ROOT_PASSWORD }}
           MINIO_LICENSE=${{ secrets.MINIO_LICENSE }}
-          GB_TOKEN=${{ secrets.MY_GB_TOKEN }}
-          GITHUB_BUCKET_NAME=${{ secrets.GITHUB_BUCKET_NAME }}
+          GITHUB_TOKEN=${{ secrets.GB_TOKEN }}
+          GITHUB_BUCKET_NAME=${{ secrets.GB_BUCKET_NAME }}
           EOF
 
       - name: Run Deployment Script
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
         run: |
           chmod +x infra/scripts/provision_server.sh
-          ./infra/scripts/provision_server.sh ${{ secrets.SERVER_HOST }} ~/.ssh/id_rsa
+          ./infra/scripts/provision_server.sh "$SERVER_HOST" ~/.ssh/id_rsa

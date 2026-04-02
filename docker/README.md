@@ -102,7 +102,7 @@ MINIO_ROOT_PASSWORD=changeme
 MINIO_LICENSE=<paste your license JWT here>
 
 # GitHub
-GB_TOKEN=<your GitHub personal access token>
+GITHUB_TOKEN=<your GitHub personal access token>
 GITHUB_BUCKET_NAME=github-data
 ```
 

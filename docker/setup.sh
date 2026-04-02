@@ -208,7 +208,7 @@ seed_mongo_configs() {
   docker-compose exec -T mongodb mongosh -u "$MONGO_USER" -p "$MONGO_PASSWORD" --authenticationDatabase admin --eval "
     const db = db.getSiblingDB('$PROJECT_NAME');
     db.secrets.updateOne({ env: 'global' }, { \$set: { project_name: '$PROJECT_NAME', minio_user: '$MINIO_ROOT_USER', minio_pass: '$MINIO_ROOT_PASSWORD' } }, { upsert: true });
-    db.secrets.updateOne({ env: 'github' }, { \$set: { github_token: '$GB_TOKEN', github_bucket: '$GITHUB_BUCKET_NAME' } }, { upsert: true });
+    db.secrets.updateOne({ env: 'github' }, { \$set: { github_token: '$GITHUB_TOKEN', github_bucket: '$GITHUB_BUCKET_NAME' } }, { upsert: true });
     
     // Seed Crawler Configs
     db.crawler_state.createIndex({ state_key: 1 }, { unique: true });
