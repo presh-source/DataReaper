@@ -3,12 +3,12 @@ name: Terraform Deploy to OCI
 on:
   push:
     paths:
-      - 'infra/tf/**'
+      - 'v1/infra/tf/**'
     branches:
       - main
   pull_request:
     paths:
-      - 'infra/tf/**'
+      - 'v1/infra/tf/**'
   workflow_dispatch:
 
 jobs:
@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: infra/tf
+        working-directory: v1/infra/tf
 
     steps:
       - name: Checkout Code

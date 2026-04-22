@@ -46,5 +46,5 @@ jobs:
         env:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
         run: |
-          chmod +x infra/scripts/provision_server.sh
-          ./infra/scripts/provision_server.sh "$SERVER_HOST" ~/.ssh/id_rsa
+          chmod +x v1/infra/scripts/provision_server.sh
+          ./v1/infra/scripts/provision_server.sh "$SERVER_HOST" ~/.ssh/id_rsa
